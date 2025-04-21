@@ -1,171 +1,163 @@
+"""Comprehensive test for Agent4o framework with enhanced capabilities.
+
+This test script demonstrates the various capabilities of the Agent4o framework,
+including date/time retrieval, coordinate lookup, weather data, and comparison features.
+
+Author: Mansoor Ali
+Date: April 2025
+"""
+
 import asyncio
 import json
-import inspect
-from Agent4o import ReActAgent, configure_azure_openai, function_registry
+from pprint import pprint
+from datetime import datetime
+from Agent4o import ReActAgent, configure_azure_openai
 
 async def test_Agent4o():
-    """
-    Test the Agent4o functionality with a simple query.
-    """
-    try:
-        # Configure Azure OpenAI and get the model name
-        print("Configuring Azure OpenAI...")
-        model_name = await configure_azure_openai()
-        print(f"Using model: {model_name}")
+    """Run comprehensive tests on the Agent4o framework."""
+    print("=" * 80)
+    print("AGENT4O COMPREHENSIVE TEST SUITE")
+    print("=" * 80)
+    print("\nStarting test at:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # Configure Azure OpenAI and get the model name
+    print("\nConfiguring Azure OpenAI...")
+    model_name = await configure_azure_openai()
+    print(f"Using model: {model_name}")
+    
+    # Create Agent4o instance with direct function calling
+    print("\nCreating Agent4o instance...")
+    agent = await ReActAgent.create(
+        name="TestAgent",
+        role="AI Assistant",
+        goal="Assist users with intelligent responses using available functions",
+        tools=[],  # No CrewAI tools needed for these tests
+        llm_model_name=model_name,
+        use_direct_calling=True
+    )
+    
+    # Define test categories and their queries
+    test_categories = {
+        "Basic Functionality": [
+            "What is the date today?",
+            "What time is it now?"
+        ],
+        "Location Services": [
+            "What are the coordinates of New York City?",
+            "Where is Tokyo located?"
+        ],
+        "Weather Information": [
+            "What's the weather like in London?",
+            "Tell me about the weather in Paris right now",
+            "How hot is it in Tokyo today?"
+        ],
+        "Multi-function Queries": [
+            "What is the current date, time and weather in Berlin?",
+            "Tell me the time and temperature in Sydney"
+        ],
+        "Comparison Features": [
+            "Compare the weather in London and Paris",
+            "Which is warmer right now, New York or Tokyo?"
+        ]
+    }
+    
+    # Process all tests by category
+    all_results = []
+    
+    for category, queries in test_categories.items():
+        print("\n" + "=" * 80)
+        print(f"TEST CATEGORY: {category}")
+        print("=" * 80)
         
-        # Create the agent with direct function calling
-        print("\nCreating Agent4o instance...")
-        agent = await ReActAgent.create(
-            name="TestAgent",
-            role="Test Assistant",
-            goal="Test the Agent4o functionality",
-            tools=[],  # No CrewAI tools needed for this test
-            llm_model_name=model_name,
-            use_direct_calling=True
-        )
-        
-        # Test with a simple date/time query
-        test_query = "What is today's date and time and tell me Coordinates of Malir karachi?"
-        print(f"\nSending test query: '{test_query}'")
-        
-        # Let's try a more direct approach to verify function calling
-        print("\n[INFO] Starting test with direct logging...")
-        
-        # Extract the function calling implementation directly
-        # We'll add manual print statements to log what's happening
-        async def run_test(query):
-            # Define the tools for function calling
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "GetDate",
-                        "description": "Returns the current date.",
-                        "parameters": {}
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "GetTime",
-                        "description": "Returns the current time.",
-                        "parameters": {}
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "GetCoordinatesOfCity",
-                        "description": "Returns the coordinates for a city.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "city_name": {
-                                    "type": "string",
-                                    "description": "The name of the city"
-                                }
-                            },
-                            "required": ["city_name"]
-                        }
-                    }
-                }
-            ]
+        category_results = []
+        for i, query in enumerate(queries):
+            print(f"\nTest {i+1}: {query}")
+            print("-" * 50)
             
-            # List available tools
-            print("\n[INFO] Tools available to the model:")
-            for i, tool in enumerate(tools):
-                print(f"  {i+1}. {tool['function']['name']}: {tool['function'].get('description', '')}")
-            
-            # First API call to the model
-            print("\n[INFO] Sending initial query to Azure OpenAI...")
-            response = agent.openai_client.chat.completions.create(
-                model=agent.deployment_name,
-                temperature=0.5,
-                max_tokens=500,
-                messages=[{"role": "user", "content": query}],
-                tools=tools
-            )
-            
-            # Check if function calls were requested
-            function_calls = []
-            if response.choices[0].message.tool_calls:
-                print(f"\n[INFO] Model requested function calls:")
-                for i, tool_call in enumerate(response.choices[0].message.tool_calls):
-                    function_name = tool_call.function.name
-                    print(f"  {i+1}. Function: {function_name}")
-                    
-                    # Create messages array for follow-up request
-                    messages = [{"role": "user", "content": query}]
-                    messages.append({
-                        "role": "assistant",
-                        "content": response.choices[0].message.content,
-                        "tool_calls": [{
-                            "id": tool_call.id,
-                            "type": "function", 
-                            "function": {"name": function_name, "arguments": "{}"}
-                        }]
-                    })
-                    
-                    # Execute the functions
-                    if function_name in function_registry:
-                        # For the city coordinates function, extract city name if possible
-                        if function_name == "GetCoordinatesOfCity" and "Malir" in query:
-                            result = function_registry[function_name]("Malir Karachi")
-                        else:
-                            result = function_registry[function_name]()
-                            
-                        function_calls.append({
-                            "function": function_name,
-                            "result": result
-                        })
-                        print(f"     Result: {result}")
-                        
-                        # Add the function result to messages
-                        messages.append({
-                            "role": "tool", 
-                            "tool_call_id": tool_call.id, 
-                            "content": str(result)
-                        })
+            try:
+                # Process the query
+                start_time = datetime.now()
+                result = await agent.run_task(query)
+                end_time = datetime.now()
+                execution_time = (end_time - start_time).total_seconds()
                 
-                # Send the function results back for final response
-                print("\n[INFO] Sending function results back to model...")
-                final_response = agent.openai_client.chat.completions.create(
-                    model=agent.deployment_name,
-                    messages=messages,
-                    tools=tools
-                )
+                # Display the result
+                print(f"\nAgent4o Response (completed in {execution_time:.2f}s):")
+                print("---")
+                print(result)
+                print("---")
                 
-                return final_response.choices[0].message.content, function_calls
-            else:
-                print("\n[INFO] Model did not request any function calls")
-                return response.choices[0].message.content, []
+                # Store the result
+                category_results.append({
+                    "query": query,
+                    "result": result,
+                    "execution_time": execution_time
+                })
+                
+            except Exception as e:
+                print(f"Error testing query '{query}': {str(e)}")
+                category_results.append({
+                    "query": query,
+                    "error": str(e)
+                })
         
-        # Run our test function
-        response, function_calls = await run_test(test_query)
-        
-        # Display the response
-        print("\nAgent4o Response:")
-        print("-" * 50)
-        print(response)
+        all_results.append({
+            "category": category,
+            "tests": category_results
+        })
+    
+    # Print summary
+    print("\n" + "=" * 80)
+    print("TEST SUMMARY")
+    print("=" * 80)
+    
+    total_tests = sum(len(category["tests"]) for category in all_results)
+    error_count = sum(1 for category in all_results for test in category["tests"] if "error" in test)
+    success_rate = ((total_tests - error_count) / total_tests) * 100 if total_tests > 0 else 0
+    
+    print(f"\nTotal tests run: {total_tests}")
+    print(f"Successful tests: {total_tests - error_count}")
+    print(f"Tests with errors: {error_count}")
+    print(f"Success rate: {success_rate:.1f}%")
+    
+    # Calculate average execution time for successful tests
+    execution_times = [test["execution_time"] for category in all_results 
+                      for test in category["tests"] if "execution_time" in test]
+    
+    if execution_times:
+        avg_time = sum(execution_times) / len(execution_times)
+        print(f"Average execution time: {avg_time:.2f} seconds")
+    
+    print("\nTest completed at:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print("=" * 80)
+    
+    return all_results
+
+def display_test_highlights(results):
+    """Display highlighted results from each test category."""
+    print("\n" + "=" * 80)
+    print("TEST HIGHLIGHTS")
+    print("=" * 80)
+    
+    for category in results:
+        print(f"\n{category['category']}:")
         print("-" * 50)
         
-        # Summarize function calls
-        if function_calls:
-            print("\n[INFO] Summary of Function Calls:")
-            print("-" * 50)
-            for i, call in enumerate(function_calls):
-                print(f"Call {i+1}:")
-                print(f"  Function: {call['function']}")
-                print(f"  Result: {call['result']}")
-            print("-" * 50)
+        # Display one successful result from each category if available
+        success_examples = [test for test in category["tests"] if "error" not in test]
+        if success_examples:
+            example = success_examples[0]
+            print(f"Query: {example['query']}")
+            print(f"Response: {example['result'][:150]}..." if len(example['result']) > 150 else example['result'])
+            print(f"Time: {example['execution_time']:.2f}s")
         else:
-            print("\n[WARNING] No functions were called during processing!")
-        
-        print("\nTest completed successfully!")
-        
-    except Exception as e:
-        print(f"Error during testing: {str(e)}")
+            print("No successful tests in this category")
+    
+    print("\n" + "=" * 80)
 
 if __name__ == "__main__":
-    # Run the test
-    asyncio.run(test_Agent4o())
+    # Run the test suite
+    all_results = asyncio.run(test_Agent4o())
+    
+    # Display highlights from the tests
+    display_test_highlights(all_results)
